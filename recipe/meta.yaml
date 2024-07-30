@@ -9,13 +9,25 @@ package:
 source:
   - url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
     sha256: 082941a56acfc93a83e221e08ef5d5b2083b1ff58d18be7c27d003a11e4a41d0
+  # use GH release archive just for tests
+  - url: https://github.com/automl/{{ name|lower }}/archive/refs/tags/v{{ version }}.tar.gz
+    sha256: 99faff39ec6c5362d5ebf2f1330ce5d6ab2a487ef2eff70f387c8092a8af5559
+    folder: gh_src
+    patches:
+      - patches/0001-use-pytest-fixture-for-logger.patch
 
 build:
   number: 0
+  # It requires an old version of scikit-learn which we have only
+  # for py38 and py39.
+  # Skip win because pynisher not available
   skip: True  # [py<37 or py>39 or win]
   script: {{ PYTHON }} -m pip install . --no-deps --no-build-isolation -vv
 
 requirements:
+  build:
+    - patch     # [not win]
+    - m2-patch  # [win]
   host:
     - pip
     - python
@@ -29,25 +41,83 @@ requirements:
     - distro
     - joblib
     - liac-arff
-    - numpy >=1.9.0
-    - pandas >=1.0
+    # https://github.com/scikit-learn/scikit-learn/pull/23654
+    # https://github.com/numpy/numpy/issues/14210
+    - numpy >=1.9.0,<1.22.0a0
+    # https://github.com/opensearch-project/opensearch-py-ml/issues/263
+    - pandas >=1.0,<2.0.0
     - pynisher >=0.6.3,<0.7
     - pyrfr >=0.8.1,<0.9
     - pyyaml
     - scikit-learn >=0.24.0,<0.25.0
-    - scipy >=1.7.0
+    # https://github.com/scikit-learn/scikit-learn/pull/23633
+    - scipy >=1.7.0,<1.9
     - smac >=1.2,<1.3
     - threadpoolctl
     - typing_extensions
+
+{% set tests_to_skip = "" %}
+# skip test_autosklearn2_classification_methods_returns_self_sparse or test_autosklearn2_classification_methods_returns_self
+# because numpy is more recent than the version used by the tests and the picke.dump fails
+{% set tests_to_skip = tests_to_skip + " test_autosklearn2_classification_methods_returns_self_sparse" %}
+{% set tests_to_skip = tests_to_skip + " or test_autosklearn2_classification_methods_returns_self" %}
+# skip test_autosklearn_anneal with MEMOUT because 
+{% set tests_to_skip = tests_to_skip + " or test_autosklearn_anneal" %}
+# skip for numerical approximation
+{% set tests_to_skip = tests_to_skip + " or test_default_digits_multilabel or test_default_iris_predict_proba" %}
+{% set tests_to_skip = tests_to_skip + " or test_default_configuration_classify or test_weighting_effect" %}
+{% set tests_to_skip = tests_to_skip + " or test_default_boston or test_default_diabetes_sparse" %}
+{% set tests_to_skip = tests_to_skip + " or test_default_digits_iterative_fit or test_default_diabetes_iterative_sparse_fit" %}
+{% set tests_to_skip = tests_to_skip + " or test_default_digits or test_default_configuration_regression" %}
+# skip test_metadata_generation because there is a manual step to be done. see: 
+# https://github.com/automl/auto-sklearn/blob/bd049a56bab865afca4a83b82dc4ce997a749b76/test/test_scripts/test_metadata_generation.py#L44
+{% set tests_to_skip = tests_to_skip + " or test_metadata_generation" %}
+# skip test_trials_callback_execution because does not mock _logger and it
+# is None
+{% set tests_to_skip = tests_to_skip + " or test_trials_callback_execution" %} 
+# a few tests using dask fail with "RuntimeError: can't start new thread"
+{% set tests_to_skip = tests_to_skip + " or test_local_dask_creates_new_clients or test_user_dask" %}
+
+{% set tests_to_ignore = "" %}
+# ignore these tests because they use pytest-cases (unavailable)
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/cases.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_construction.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_dataset_compression.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_dummy_predictions.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_fit.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_model_predict.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_pareto_front.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_performance_over_time.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_performance.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_post_fit.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_refit.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_show_models.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_sklearn_compliance.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_ensemble_builder/test_ensemble_builder_real.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_ensemble_builder/test_ensemble_builder.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_ensemble_builder/test_manager.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_ensemble_builder/test_run.py" %}
 
 test:
   imports:
     - autosklearn
     - autosklearn.data
-  commands:
-    - pip check
   requires:
     - pip
+    - pytest >=4.6
+    - pytest-xdist
+    - pytest-timeout
+    # - pytest-cases >=3.6.11
+    - openml
+  source_files:
+    - gh_src/test
+  commands:
+    - pip check
+    # remove fixtures that use pytest-cases (unavailable)
+    - rm gh_src/test/fixtures/ensembles.py
+    - rm gh_src/test/fixtures/ensemble_building.py
+    - rm gh_src/test/fixtures/caching.py
+    - pytest -v gh_src/test {{ tests_to_ignore }} -k "not ({{ tests_to_skip }})"
 
 about:
   home: https://automl.github.io/auto-sklearn
@@ -59,7 +129,7 @@ about:
     - LICENSE.txt
     - autosklearn/automl_common/LICENSE
   license_family: Other
-  doc_url: https://automl.github.io/auto-sklearn/master/manual.html
+  doc_url: https://automl.github.io/auto-sklearn
   dev_url: https://github.com/automl/auto-sklearn
 
 extra:
