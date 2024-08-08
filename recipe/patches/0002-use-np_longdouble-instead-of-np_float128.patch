@@ -1,7 +1,7 @@
 From b80388a785dc68bbbe82e0097a5512136d81e07f Mon Sep 17 00:00:00 2001
 From: Lorenzo Pirritano <lpirritano@anaconda.com>
 Date: Wed, 31 Jul 2024 09:16:49 +0200
-Subject: [PATCH 2/2] use np.longdouble instead of np.float128
+Subject: [PATCH 2/3] use np.longdouble instead of np.float128
 
 ---
  test/test_util/test_data.py | 22 +++++++++++-----------

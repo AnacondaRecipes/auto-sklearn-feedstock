@@ -15,6 +15,7 @@ source:
     patches:
       - patches/0001-use-pytest-fixture-for-logger.patch
       - patches/0002-use-np_longdouble-instead-of-np_float128.patch  # [arm64]
+      - patches/0003-replace-is_datetime_or_timedelta_dtype.patch
 
 build:
   number: 0
@@ -37,7 +38,7 @@ requirements:
     - python
     - configspace >=0.4.21,<0.5
     - dask-core >=2021.12
-    - distributed >=2012.12
+    - distributed >=2021.12
     - distro
     - joblib
     - liac-arff
@@ -94,7 +95,7 @@ requirements:
 # https://github.com/automl/auto-sklearn/blob/bd049a56bab865afca4a83b82dc4ce997a749b76/test/test_scripts/test_metadata_generation.py#L44
 {% set tests_to_skip = tests_to_skip + " or test_metadata_generation" %}
 # skip test_trials_callback_execution because does not mock _logger and it
-# is None
+# is None (this is because pytest-cases is missing)
 {% set tests_to_skip = tests_to_skip + " or test_trials_callback_execution" %} 
 # a few tests using dask fail with "RuntimeError: can't start new thread"
 {% set tests_to_skip = tests_to_skip + " or test_local_dask_creates_new_clients or test_user_dask" %}
@@ -142,8 +143,11 @@ test:
     - rm gh_src/test/fixtures/ensembles.py
     - rm gh_src/test/fixtures/ensemble_building.py
     - rm gh_src/test/fixtures/caching.py
-    - pytest -v gh_src/test {{ tests_to_ignore }} -k "not ({{ tests_to_skip }})"
-    # - pytest -v gh_src/test -k test_fit_n_jobs
+    # https://github.com/automl/auto-sklearn/blob/v0.15.0/.github/workflows/pytest.yml#L116-L118C33
+    - export OPENBLAS_NUM_THREADS=1
+    - export OMP_NUM_THREADS=1
+    - export MKL_NUM_THREADS=1
+    - pytest -v -s gh_src/test {{ tests_to_ignore }} -k "not ({{ tests_to_skip }})"
 
 about:
   home: https://automl.github.io/auto-sklearn

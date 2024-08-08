@@ -1,0 +1,29 @@
+From d8eb3170e1dbc7b4dfaaef5a7e18281e12e8db1e Mon Sep 17 00:00:00 2001
+From: Lorenzo Pirritano <lpirritano@anaconda.com>
+Date: Thu, 8 Aug 2024 11:43:38 +0200
+Subject: [PATCH 3/3] replace is_datetime_or_timedelta_dtype
+
+---
+ autosklearn/data/feature_validator.py | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/autosklearn/data/feature_validator.py b/autosklearn/data/feature_validator.py
+index 07c1083..48b6596 100644
+--- a/autosklearn/data/feature_validator.py
++++ b/autosklearn/data/feature_validator.py
+@@ -328,8 +328,10 @@ class FeatureValidator(BaseEstimator):
+                         warnings.warn(
+                             f"you disabled text encoding column {column} will be"
+                             f"encoded as category"
+-                        )
+-                elif pd.core.dtypes.common.is_datetime_or_timedelta_dtype(
++                        )                        
++                elif pd.core.dtypes.common.is_datetime64_any_dtype(
++                    X[column].dtype
++                ) or pd.core.dtypes.common.is_timedelta64_dtype(
+                     X[column].dtype
+                 ):
+                     raise ValueError(
+-- 
+2.39.1
+
