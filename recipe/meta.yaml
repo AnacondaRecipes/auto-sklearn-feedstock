@@ -1,7 +1,6 @@
 {% set name = "auto-sklearn" %}
 {% set version = "0.15.0" %}
 
-
 package:
   name: {{ name|lower }}
   version: {{ version }}
@@ -9,48 +8,145 @@ package:
 source:
   - url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
     sha256: 082941a56acfc93a83e221e08ef5d5b2083b1ff58d18be7c27d003a11e4a41d0
-  - url: https://raw.githubusercontent.com/automl/automl_common/main/LICENSE
-    sha256: c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
-    # automl_common license
+  # use GH release archive just for tests
+  - url: https://github.com/automl/{{ name|lower }}/archive/refs/tags/v{{ version }}.tar.gz
+    sha256: 99faff39ec6c5362d5ebf2f1330ce5d6ab2a487ef2eff70f387c8092a8af5559
+    folder: gh_src
+    patches:
+      - patches/0001-use-pytest-fixture-for-logger.patch
+      - patches/0002-use-np_longdouble-instead-of-np_float128.patch  # [arm64]
+      - patches/0003-replace-is_datetime_or_timedelta_dtype.patch
 
 build:
   number: 0
-  noarch: python
-  script: {{ PYTHON }} -m pip install . -vv
+  # It requires an old version of scikit-learn which we have only
+  # for py38 and py39.
+  # Skip win because pynisher not available
+  skip: True  # [py<37 or py>39 or win]
+  script: {{ PYTHON }} -m pip install . --no-deps --no-build-isolation -vv
 
 requirements:
+  build:
+    - patch     # [not win]
   host:
     - pip
-    - python >=3.7
+    - python
+    - setuptools
+    - wheel
   run:
+    - python
     - configspace >=0.4.21,<0.5
-    - dask >=2021.12
-    - distributed >=2012.12
+    - dask-core >=2021.12
+    - distributed >=2021.12
     - distro
     - joblib
     - liac-arff
-    - numpy >=1.9.0
-    - pandas >=1.0
+    # https://github.com/scikit-learn/scikit-learn/pull/23654
+    # https://github.com/numpy/numpy/issues/14210
+    - numpy >=1.9.0,<1.22.0a0
+    # https://github.com/opensearch-project/opensearch-py-ml/issues/263
+    - pandas >=1.0,<2.0.0
     - pynisher >=0.6.3,<0.7
     - pyrfr >=0.8.1,<0.9
-    - python >=3.7
     - pyyaml
     - scikit-learn >=0.24.0,<0.25.0
-    - scipy >=1.7.0
-    - setuptools
+    # https://github.com/scikit-learn/scikit-learn/pull/23633
+    - scipy >=1.7.0,<1.9
     - smac >=1.2,<1.3
     - threadpoolctl
     - typing_extensions
-    - __linux
+
+{% set tests_to_skip = "" %}
+# skip test_autosklearn2_classification_methods_returns_self_sparse or test_autosklearn2_classification_methods_returns_self
+# because numpy is more recent than the version used by the tests and the picke.dump fails
+{% set tests_to_skip = tests_to_skip + " test_autosklearn2_classification_methods_returns_self_sparse" %}
+{% set tests_to_skip = tests_to_skip + " or test_autosklearn2_classification_methods_returns_self" %}
+# skip tests because fail with MEMOUT: memory_limit should be set higher
+{% set tests_to_skip = tests_to_skip + " or test_autosklearn_anneal" %}
+{% set tests_to_skip = tests_to_skip + " or test_performance_over_time_no_ensemble" %}  # [linux and x86_64]
+{% set tests_to_skip = tests_to_skip + " or test_cv_results" %}                         # [linux and x86_64]
+{% set tests_to_skip = tests_to_skip + " or test_leaderboard" %}                        # [linux and x86_64]
+# skip tests on osx which can't download datasets
+{% set tests_to_skip = tests_to_skip + " or test_list_to_dataframe" %}                                         # [osx and x86_64]
+{% set tests_to_skip = tests_to_skip + " or test_data_validation_for_classification" %}                        # [osx and x86_64]
+{% set tests_to_skip = tests_to_skip + " or test_classification_pandas_support" %}                             # [osx and x86_64]
+{% set tests_to_skip = tests_to_skip + " or test_targetvalidator_supported_types_classification" %}            # [osx and x86_64]
+{% set tests_to_skip = tests_to_skip + " or test_calculate_all_metafeatures_same_results_across_datatypes" %}  # [osx and x86_64]
+# skip tests on osx for various reasons (can't create folder, pickle local object)
+{% set tests_to_skip = tests_to_skip + " or test_selector_file_askl2_can_be_created" %}  # [osx and x86_64]
+{% set tests_to_skip = tests_to_skip + " or test_pynisher_memory_error" %}               # [osx and x86_64]
+{% set tests_to_skip = tests_to_skip + " or test_pynisher_timeout" %}                    # [osx and x86_64]
+# skip this on osx for various reasons (crash instead of stop, limits not respected)
+{% set tests_to_skip = tests_to_skip + " or test_reduce_dataset_subsampling_explicit_values" %}  # [osx]
+{% set tests_to_skip = tests_to_skip + " or test_early_stopping" %}                              # [osx]
+{% set tests_to_skip = tests_to_skip + " or test_configurations" %}                              # [osx]
+{% set tests_to_skip = tests_to_skip + " or test_multilabel or test_multioutput" %}              # [osx]
+{% set tests_to_skip = tests_to_skip + " or test_multilabel or test_multioutput" %}              # [osx]
+# skip for numerical approximation
+{% set tests_to_skip = tests_to_skip + " or test_default_digits_multilabel or test_default_iris_predict_proba" %}
+{% set tests_to_skip = tests_to_skip + " or test_default_configuration_classify or test_weighting_effect" %}
+{% set tests_to_skip = tests_to_skip + " or test_default_boston or test_default_diabetes_sparse" %}
+{% set tests_to_skip = tests_to_skip + " or test_default_digits_iterative_fit or test_default_diabetes_iterative_sparse_fit" %}
+{% set tests_to_skip = tests_to_skip + " or test_default_digits or test_default_configuration_regression" %}
+# skip for numerical approximation, flaky
+{% set tests_to_skip = tests_to_skip + " or test_reduce_dataset_reduces_size_and_precision" %}
+# skip test_metadata_generation because there is a manual step to be done. see: 
+# https://github.com/automl/auto-sklearn/blob/bd049a56bab865afca4a83b82dc4ce997a749b76/test/test_scripts/test_metadata_generation.py#L44
+{% set tests_to_skip = tests_to_skip + " or test_metadata_generation" %}
+# skip test_trials_callback_execution because does not mock _logger and it
+# is None (this is because pytest-cases is missing)
+{% set tests_to_skip = tests_to_skip + " or test_trials_callback_execution" %} 
+# a few tests using dask fail with "RuntimeError: can't start new thread"
+{% set tests_to_skip = tests_to_skip + " or test_local_dask_creates_new_clients or test_user_dask" %}
+
+{% set tests_to_ignore = "" %}
+# ignore these tests because they use pytest-cases (unavailable)
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/cases.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_construction.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_dataset_compression.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_dummy_predictions.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_fit.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_model_predict.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_pareto_front.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_performance_over_time.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_performance.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_post_fit.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_refit.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_show_models.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_automl/test_sklearn_compliance.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_ensemble_builder/test_ensemble_builder_real.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_ensemble_builder/test_ensemble_builder.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_ensemble_builder/test_manager.py" %}
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_ensemble_builder/test_run.py" %}
+# ignore on osx
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_estimators/test_estimators.py" %}  # [osx]
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_evaluation/test_evaluation.py" %}  # [osx]
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_metalearning/test_metalearning.py" %}  # [osx]
+{% set tests_to_ignore = tests_to_ignore + " --ignore=gh_src/test/test_optimizer/test_smbo.py" %}  # [osx]
 
 test:
   imports:
     - autosklearn
     - autosklearn.data
-  commands:
-    - pip check
   requires:
     - pip
+    - pytest >=4.6
+    - pytest-xdist
+    - pytest-timeout
+    - openml
+  source_files:
+    - gh_src/test
+  commands:
+    - pip check
+    # remove fixtures that use pytest-cases (unavailable)
+    - rm gh_src/test/fixtures/ensembles.py
+    - rm gh_src/test/fixtures/ensemble_building.py
+    - rm gh_src/test/fixtures/caching.py
+    # https://github.com/automl/auto-sklearn/blob/v0.15.0/.github/workflows/pytest.yml#L116-L118C33
+    - export OPENBLAS_NUM_THREADS=1
+    - export OMP_NUM_THREADS=1
+    - export MKL_NUM_THREADS=1
+    - pytest -v -s gh_src/test {{ tests_to_ignore }} -k "not ({{ tests_to_skip }})"
 
 about:
   home: https://automl.github.io/auto-sklearn
@@ -60,8 +156,9 @@ about:
   license: BSD-3-Clause AND Apache-2.0
   license_file:
     - LICENSE.txt
-    - LICENSE
-  doc_url: https://automl.github.io/auto-sklearn/master/manual.html
+    - autosklearn/automl_common/LICENSE
+  license_family: Other
+  doc_url: https://automl.github.io/auto-sklearn
   dev_url: https://github.com/automl/auto-sklearn
 
 extra:
